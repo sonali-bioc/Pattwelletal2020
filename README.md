@@ -1,5 +1,5 @@
 # Introduction
-This repository contains all scripts used for our publication "A kinase-deficient NTRK2 splice variant predominates in glioma and amplifies several oncogenic signaling pathways"
+This repository contains R scripts used for our publication "A kinase-deficient NTRK2 splice variant predominates in glioma and amplifies several oncogenic signaling pathways"
 
 ## References 
 1) Vivian J, Rao AA, Nothaft FA, et al. (2017) Toil enables reproducible, open source, big biomedical data analyses. Nature biotechnology. 
