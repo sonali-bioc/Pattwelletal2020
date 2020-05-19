@@ -79,10 +79,8 @@ spinal =read.delim(file.path(dir1,"log2_rpkm_whole_gene_counts_spinal_cord.txt")
                    header=T, stringsAsFactors=FALSE, row.names=1)
 substantia_nigra = read.delim(file.path(dir1,"log2_rpkm_whole_gene_counts_substantia_nigra.txt"), 
                               header=T, stringsAsFactors=FALSE, row.names=1)
-gbm = read.delim( "log2_rpkm_whole_gene_counts_gbm.txt",
-                 header=T, stringsAsFactors=FALSE, row.names=1)
-lgg = read.delim( "log2_rpkm_whole_gene_counts_lgg.txt",
-                 header=T, stringsAsFactors=FALSE, row.names=1)
+gbm = get(load("log2_rpkm_whole_gene_counts_gbm.Rdata"))
+lgg = get(load("log2_rpkm_whole_gene_counts_lgg.Rdata"))
 colnames(gbm)= substr(colnames(gbm), 1, 12)
 colnames(lgg) = substr(colnames(lgg), 1, 12)
 
