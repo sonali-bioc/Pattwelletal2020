@@ -1,0 +1,280 @@
+---
+title: "Transcript Analysis of TCGA and GTEx data"
+author: "Sonali Arora"
+date: "May 19, 2020"
+output: 
+  html_document:
+    toc: true
+    theme: united
+---
+
+# Downloading Transcript data
+
+In this vignette, we will first download transcript data from TCGA for TCGA-LGG and TCGA-GBM samples and Brain samples from GTEx. 
+
+Transcript data for TCGA-GBM and TCGA-LGG were downloaded from Broad's firebrowse [http://firebrowse.org/?cohort=GBM&download_dialog=true].
+Transcript data (TPM) for normal brain samples was downloaded from GTex data portal (v7) file : GTEx_Analysis_2016-01-15_v7_RSEMv1.2.22_transcript_tpm.txt
+
+
+# Obtaining transcript data from TCGA-GBM
+
+
+```{r}
+rm(list=ls())
+dir1 = "~/HollandLabShared/Sonali/test/github_data"
+
+library(grid)
+library(gridExtra)
+library(ggplot2)
+
+ntrk1  = c("uc001fqf.1", "uc009wsi.1", "uc001fqh.1", "uc001fqi.1", "uc009wsk.1")
+
+ntrk3 = c("uc002bmh.2", "uc002bme.2", "uc002bmf.2", 
+          "uc021sua.1", "uc010upl.1",  "uc010bnh.1", "uc010bni.2", "uc002bmg.3")
+
+ntrk2 = c("uc011lsz.2",   "uc011lta.2", "uc004aoc.3",  
+  "uc004any.1", "uc004aoa.1",  "uc004anz.1",  "uc004anv.1", "uc004aob.1", "uc011ltb.1")                       
+             
+raw = read.delim("GBM.rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_isoforms__data.data.txt", 
+                header=T, stringsAsFactors=FALSE,row.names=1)
+raw2 = raw[, seq(2, ncol(raw), 2)]
+raw2 = raw2[-1, ] # first row contains scaled_estimate now
+tpm_gbm = data.matrix(raw2)* 1000000
+
+gbm=log2(tpm_gbm+1)
+
+ntrk1_idx = match(ntrk1, rownames(gbm))
+ntrk2_idx = sapply(substr(ntrk2, 1, 8), function(x) grep(x, rownames(gbm)))
+ntrk3_idx = na.omit(unlist(sapply(substr(ntrk3, 1, 8), function(x) grep(x, rownames(gbm)))))
+
+gbm_ntrk1 = gbm[ntrk1_idx, ]
+gbm_ntrk2 = gbm[ntrk2_idx, ]
+gbm_ntrk3 = gbm[ntrk3_idx, ]
+
+gbm_ntrk1= t(gbm_ntrk1)
+gbm_ntrk2 = t(gbm_ntrk2)
+gbm_ntrk3 = t(gbm_ntrk3)
+
+colnames(gbm_ntrk1) = paste0("NTRK1_", colnames(gbm_ntrk1))
+colnames(gbm_ntrk2) = paste0("NTRK2_", colnames(gbm_ntrk2))
+colnames(gbm_ntrk3) = paste0("NTRK3_", colnames(gbm_ntrk3))
+
+finaldf = cbind(sampleName = rownames(gbm_ntrk1), gbm_ntrk1, gbm_ntrk2, gbm_ntrk3)
+write.table(finaldf, file.path(res_dir, "gbm_NTRK_transcripts.txt"), 
+            sep = "\t", quote=FALSE, row.names=FALSE, col.names=TRUE)
+```
+
+
+# Obtaining transcript data from TCGA-lgg
+
+```{r}
+raw = read.delim("LGG.rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_isoforms__data.data.txt", 
+                header=T, stringsAsFactors=FALSE,row.names=1)
+raw2 = raw[, seq(2, ncol(raw), 2)]
+raw2 = raw2[-1, ] # first row contains scaled_estimate now
+tpm_lgg = data.matrix(raw2)* 1000000
+
+lg2=log2(tpm_lgg+1)
+
+ntrk1_idx = match(ntrk1, rownames(lgg))
+ntrk2_idx = sapply(substr(ntrk2, 1, 8), function(x) grep(x, rownames(lgg)))
+ntrk3_idx = na.omit(unlist(sapply(substr(ntrk3, 1, 8), function(x) grep(x, rownames(lgg)))))
+
+lgg_ntrk1 = lgg[ntrk1_idx, ]
+lgg_ntrk2 = lgg[ntrk2_idx, ]
+lgg_ntrk3 = lgg[ntrk3_idx, ]
+
+lgg_ntrk1= t(lgg_ntrk1)
+lgg_ntrk2 = t(lgg_ntrk2)
+lgg_ntrk3 = t(lgg_ntrk3)
+
+colnames(lgg_ntrk1) = paste0("NTRK1_", colnames(lgg_ntrk1))
+colnames(lgg_ntrk2) = paste0("NTRK2_", colnames(lgg_ntrk2))
+colnames(lgg_ntrk3) = paste0("NTRK3_", colnames(lgg_ntrk3))
+
+finaldf = cbind(sampleName = rownames(lgg_ntrk1), lgg_ntrk1, lgg_ntrk2, lgg_ntrk3)
+write.table(finaldf, file.path(res_dir, "lgg_NTRK_transcripts.txt"), 
+            sep = "\t", quote=FALSE, row.names=FALSE, col.names=TRUE)
+
+```
+
+# Obtaining transcript data from GTEX
+
+```{r}
+
+gtex = read.delim("GTEx_Analysis_2016-01-15_v7_RSEMv1.2.22_transcript_tpm.txt", 
+                  header=T , stringsAsFactors=FALSE, row.names=1)
+info = read.delim("GTEx_Data_V6_Annotations_SampleAttributesDS.txt", 
+                  header=T , stringsAsFactors=FALSE, row.names=1)
+want = c("ENSG00000198400.7", "ENSG00000148053.11", "ENSG00000140538.12")
+gtex_ntrk1 = gtex2[which(tbl[,2]==want[1]), ]
+gtex_ntrk2 = gtex2[which(tbl[,2]==want[2]), ]
+gtex_ntrk3 = gtex2[which(tbl[,2]==want[3]), ]
+
+gtex_ntrk1 = t(gtex_ntrk1)
+gtex_ntrk2 = t(gtex_ntrk2)
+gtex_ntrk3 = t(gtex_ntrk3)
+
+colnames(gtex_ntrk1) = paste0("NTRK1_", colnames(gtex_ntrk1))
+colnames(gtex_ntrk2) = paste0("NTRK2_", colnames(gtex_ntrk2))
+colnames(gtex_ntrk3) = paste0("NTRK3_", colnames(gtex_ntrk3))
+
+rownames(gtex_ntrk1) = gsub("[.]", "-", rownames(gtex_ntrk1))
+rownames(gtex_ntrk2) = gsub("[.]", "-", rownames(gtex_ntrk2))
+rownames(gtex_ntrk3) = gsub("[.]", "-", rownames(gtex_ntrk3))
+
+keep = intersect( rownames(info), rownames(gtex_ntrk1))
+info = info[ match(keep, rownames(info)),  ]
+
+test_ntrk1 = gtex_ntrk1[rownames(info),  ]
+test_ntrk2 = gtex_ntrk2[rownames(info),  ]
+test_ntrk3 = gtex_ntrk3[rownames(info),  ]
+
+finaldf  = cbind( sampleName = rownames(test_ntrk1), 
+                  v6_info[, c("SMTS", "SMTSD", "group")], 
+                   test_ntrk1, test_ntrk2, test_ntrk3)
+
+write.table(finaldf, file.path(res_dir,"Brain_gtex_regions_NTRK_transcipts_log2_tpm.txt" ), 
+            sep ="\t", quote=FALSE, row.names=TRUE, col.names=TRUE)
+```
+
+# Fig 2a
+
+```{r download }
+df = read.delim("ntrk2_status_TCGA_gtex.txt", header=T, stringsAsFactors = FALSE)
+
+spinal = read.delim("log2_rpkm_whole_gene_counts_spinal_cord.txt", 
+                    header=T, stringsAsFactors = FALSE, nrow = 10, row.names=1)
+spinal_idx = match( colnames(spinal), df$name)
+df = df[-spinal_idx, ]
+
+trunc_gbm = df[which(df$group=="GBM" ), "truncated"]
+full_len_gbm = df[which(df$group=="GBM" ), "full_length"]
+
+trunc_lgg = df[which(df$group=="LGG" ), "truncated"]
+full_len_lgg = df[which(df$group=="LGG" ), "full_length"]
+
+full_len_normal2 = df[which(df$group=="Normal2" ), "full_length"]
+trunc_normal2 = df[which(df$group=="Normal2" ), "truncated"]
+
+gbm <- data.frame(DataSource = c(rep("TrkB.FL", 166), 
+                                 rep("TrkB.T1", 166)),
+                  value = c(log2(as.numeric(full_len_gbm)+1), 
+                            log2(as.numeric(trunc_gbm)+1) ) )
+lgg <- data.frame(DataSource = c(rep("TrkB.FL", 530), 
+                                 rep("TrkB.T1", 530)),
+                  value = c(log2(as.numeric(full_len_lgg)+1), 
+                            log2(as.numeric(trunc_lgg)+1) ) )
+brain <- data.frame(DataSource = c(rep("TrkB.FL", 956), 
+                                   rep("TrkB.T1", 956)),
+                    value = c(log2(as.numeric(full_len_normal2)+1), 
+                              log2(as.numeric(trunc_normal2)+1) ) )
+
+gbm$DataSource <- factor(gbm$DataSource, levels =c("TrkB.FL","TrkB.T1"))
+lgg$DataSource <- factor(lgg$DataSource, levels =c("TrkB.FL","TrkB.T1"))
+brain$DataSource <- factor(brain$DataSource, levels =c("TrkB.FL","TrkB.T1"))
+
+bar1 <- ggplot(gbm, aes(x = DataSource,  y = value, fill = DataSource)) +
+    geom_boxplot() + theme_bw() +
+    coord_cartesian(ylim = c(0, 10)) + 
+    theme( axis.title=element_text(size=15, colour="black"), 
+           axis.text=element_text(size=15, colour="black"), 
+           plot.title = element_text(lineheight=.8, face="bold", size=15))+
+    ylab("log2(TPM+1)") + xlab("") +
+    ggtitle("GBM") +
+    guides(fill=FALSE) +
+    scale_fill_manual(name = "Data Source",
+                      labels = c("TrkB.FL","TrkB.T1"),
+                      values = c("Coral", "cyan4"))
+
+bar2<- ggplot(lgg, aes(x = DataSource,  y = value, fill = DataSource)) +
+    geom_boxplot() + theme_bw() +
+    coord_cartesian(ylim = c(0, 10)) + 
+    theme( axis.title=element_text(size=15, colour="black"), 
+           axis.text=element_text(size=15, colour="black"), 
+           plot.title = element_text(lineheight=.8, face="bold", size=15))+
+    ylab("log2(TPM+1)") + xlab("") +
+    ggtitle("LGG") +
+    guides(fill=FALSE) +
+    scale_fill_manual(name = "Data Source",
+                      labels = c("TrkB.FL","TrkB.T1"),
+                      values = c("Coral", "cyan4"))
+
+bar3 <- ggplot(brain, aes(x = DataSource,  y = value, fill = DataSource)) +
+    geom_boxplot() + theme_bw() +
+    coord_cartesian(ylim = c(0, 10)) + 
+    theme( axis.title=element_text(size=15, colour="black"), 
+           axis.text=element_text(size=15, colour="black"), 
+           plot.title = element_text(lineheight=.8, face="bold", size=15))+
+    ylab("log2(TPM+1)") + xlab("") +
+    ggtitle("GTEx (Normal Brain)") +
+    guides(fill=FALSE) +
+    scale_fill_manual(name = "Data Source",
+                      labels = c("TrkB.FL","TrkB.T1"),
+                      values = c("Coral", "cyan4"))
+
+
+pdf( "Fig2a.pdf", width =10, height=7)
+lst <- list( bar3, bar2, bar1)
+layout <- matrix(  c(1,2,3), nrow=1, ncol=3)
+grid.arrange(grobs = lst , layout_matrix =layout) 
+dev.off()
+
+```
+
+
+# Fig 2b
+
+```{r}
+
+plot_title_size =40
+axis_text_size = 40
+axis_title_size=40
+legend_text_size=40
+spacing=0.3
+
+pc_data1 = read.delim("pc_data_tcga_gtex_No_spinal_cord_No_cerebellum.txt", 
+                      header=T, stringsAsFactors = FALSE)
+
+percentVar=c( 50.25,  8.74)
+ntrk2_status = read.delim("~/HollandLabShared/Sonali/Siobhan/wet_lab_paper/ntrk2_status_TCGA_gtex.txt",
+                          header=T, stringsAsFactors=FALSE)
+tcga = pc_data1[ which(pc_data1[,"sampleType"]=="TCGA"), ]
+gtex = pc_data1[ which(pc_data1[,"sampleType"]=="GTEX"), ]
+tcga$ntrk2_status =rep(NA, nrow(tcga))
+tcga$ntrk2_status = ntrk2_status[match(tcga[,"sampleName"], substr(ntrk2_status[,1], 1, 12) ), "status"]
+gtex$ntrk2_status =rep(NA, nrow(gtex))
+gtex$ntrk2_status = ntrk2_status[na.omit(match(gtex[,"sampleName"], ntrk2_status[,1])), "status"]
+pc_data1 = rbind(tcga, gtex)
+pc_data1 = pc_data1[-c(which(is.na(pc_data1[,"ntrk2_status"]))), ]
+pc_data1$ntrk2_status = gsub("truncated", "TrkB.T1", pc_data1$ntrk2_status)
+pc_data1$ntrk2_status = gsub("full_length", "TrkB.FL", pc_data1$ntrk2_status)
+pc_data1$ntrk2_status= factor(pc_data1$ntrk2_status, 
+                              levels = c("TrkB.T1", "TrkB.FL"))
+
+figs2b = ggplot(pc_data1, aes(PC1, PC2, color=ntrk2_status, shape=sampleType )) +
+    geom_point(size=7, alpha=0.6) +
+    xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+    ylab(paste0("PC2: ",percentVar[2],"% variance")) +
+    ggtitle("2b ") +
+    theme_bw() +
+    theme(plot.title = element_text(lineheight=.8, face="bold", size=plot_title_size),
+          axis.text=element_text(size=axis_text_size, colour="black"),
+          axis.title=element_text(size=axis_title_size,face="bold"), 
+          legend.title = element_text(face = "bold", size=legend_text_size), 
+          legend.text = element_text(size=legend_text_size), 
+          axis.text.y=element_text(colour="black"), 
+          legend.key.height = unit(1.5, "cm")) +
+    scale_colour_manual(name = "NTRK2 Status",
+                        labels = c("TrkB.T1", "TrkB.FL"),
+                        values = c("cyan4", "Coral")) 
+
+pdf("fig2b_TCGA_and_GTEX_NTRK2_STATUS.pdf", width =20, height =10 )
+print(figs2b)
+dev.off()
+
+```
+
+
+
+

@@ -1,0 +1,132 @@
+---
+title: "Differential Gene Correlation Analysis (DGCA) of TCGA and GTEx data"
+author: "Sonali Arora"
+date: "May 19, 2020"
+output: 
+  html_document:
+    toc: true
+    theme: united
+---
+
+In this vignette, we will compute Differential Gene correlations for  (A) GBM vs pooled Brain samples from GTEx and (B)  LGG vs pooled Brain samples from GTEx
+
+
+# DGCA
+
+```{r download }
+library(DGCA)
+
+fls =list.files(pattern= "log2_rpkm_whole_gene_counts_*")
+rm = grep("spinal_cord.txt|cerebellar_hemisphere.txt|cerebellum.txt|gbm.txt|lgg.txt", fls)          
+group2 = fls[-rm]
+lst = lapply(group2, function(x) read.delim(x, header=T, stringsAsFactors=FALSE, row.names=1))
+others_mat = do.call(cbind, lst)
+
+gbm_data = read.delim("log2_rpkm_whole_gene_counts_gbm.txt", 
+                      header=T, stringsAsFactors=FALSE, row.names=1)
+genes = intersect( rownames(gbm_data), rownames(others_mat))
+gbm_data = gbm_data[genes, ]
+others_mat = others_mat[genes, ]
+
+
+group1 = "groupOther"
+group2 = "groupGBM"
+group = c(rep("Other", 956), rep("GBM", 170))
+
+map = c(
+    "+/+" = paste0("Positively correlation in both ",group1," and ",group2),
+    "+/0" = paste0("Positive correlation in ",group1,", and no significant correlation in ",group2),
+    "+/-" = paste0("Positive correlation in ",group1,", and negative correlation in ",group2),
+    "0/+" = paste0("No significant correlation in ",group1,", and positive correlation in ",group2),
+    "0/0" = "No significant correlation in either condition",
+    "0/-" = paste0("No significant correlation in ",group1,", and negative correlation in ",group2),
+    "-/+" = paste0("Negative correlation in ",group1,", and positive correlation in ",group2),
+    "-/0" = paste0("Negative correlation in ",group1,", and no significant correlation in ",group2),
+    "-/-" = paste0("Negative correlation in both ",group1," and ",group2)
+)
+
+data_matrix = cbind(others_mat, gbm_data)
+data_matrix = 2^ data_matrix
+
+design_matrix =  model.matrix(~0+group)
+ddcor_res = ddcorAll(inputMat = data_matrix, design = design_matrix,
+                     compare = c(group1, group2),  nPerms=1 , splitSet="NTRK2")
+
+ddcor_res$Description = map[as.character(ddcor_res[, "Classes"])  ]
+idx1 = grep("NTRK2", ddcor_res[,1])
+idx2 = grep("NTRK2", ddcor_res[,2])
+
+ntrk2= ddcor_res[unique(c(idx1, idx2)), ]
+idx3 = which(ntrk2$pValDiff_adj < 0.05)
+gbm = ntrk2[idx3, ]
+
+gbm_categ2 = gbm[which(gbm[,"groupOther_cor"] < 0 & gbm[,5] >0), ]
+
+write.table(categ2, "categ2_genes_DGCA_result_GBM.txt", 
+            sep="\t", quote=FALSE, row.names=FALSE, col.names=TRUE)
+gbm_goi = gbm_categ2[1:350,"Gene1"]
+
+```
+
+
+# DGCA - LGG vs GTEx Pooled samples
+
+```{r}
+lgg_data = read.delim("log2_rpkm_whole_gene_counts_lgg.txt", 
+                      header=T, stringsAsFactors=FALSE, row.names=1)
+
+lgg_data = lgg_data[genes, ]
+
+group = c(rep("Other", 956), rep("LGG", 532))
+group1 = "groupOther"
+group2 = "groupLGG"
+
+map = c(
+    "+/+" = paste0("Positively correlation in both ",group1," and ",group2),
+    "+/0" = paste0("Positive correlation in ",group1,", and no significant correlation in ",group2),
+    "+/-" = paste0("Positive correlation in ",group1,", and negative correlation in ",group2),
+    "0/+" = paste0("No significant correlation in ",group1,", and positive correlation in ",group2),
+    "0/0" = "No significant correlation in either condition",
+    "0/-" = paste0("No significant correlation in ",group1,", and negative correlation in ",group2),
+    "-/+" = paste0("Negative correlation in ",group1,", and positive correlation in ",group2),
+    "-/0" = paste0("Negative correlation in ",group1,", and no significant correlation in ",group2),
+    "-/-" = paste0("Negative correlation in both ",group1," and ",group2)
+)
+data_matrix= cbind(others_mat, lgg_data)
+data_matrix = 2^ data_matrix
+
+### run DGCA
+design_matrix =  model.matrix(~0+group)
+ddcor_res = ddcorAll(inputMat = data_matrix, design = design_matrix,
+                     compare = c(group1, group2), splitSet="NTRK2")
+
+ddcor_res$Description = map[as.character(ddcor_res[, "Classes"])  ]
+idx1 = grep("NTRK2", ddcor_res[,1])
+idx2 = grep("NTRK2", ddcor_res[,2])
+ntrk2= ddcor_res[unique(c(idx1, idx2)), ]
+idx3 = which(ntrk2$pValDiff_adj < 0.05)
+lgg = ntrk2[idx3, ]
+lgg_categ2 = lgg[which(lgg[,3] < 0 & lgg[,5] >0), ]
+
+write.table(categ2, file.path(resdir, "categ2_genes_DGCA_result_LGG.txt"), 
+            sep="\t", quote=FALSE, row.names=FALSE, col.names=TRUE)
+lgg_goi = gbm_categ2[1:350,"Gene1"]
+
+
+```
+
+
+
+# GO analysis 
+
+Now we will perform Gene Ontology (GO) and Pathway enrichment analysis (from Reactome)
+on the top 50 genes that are differentially correlated with NTRK2.
+
+```{r}
+source("Utils.R")
+
+myEnrichmentFunction(lgg_goi, title="differentially_correlated_in_LGG", resdir=getwd())
+myEnrichmentFunction(gbm_goi, title="differentially_correlated_in_GBM", resdir=getwd())
+
+````
+

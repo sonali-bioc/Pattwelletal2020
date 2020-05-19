@@ -1,0 +1,113 @@
+---
+title: "Finding differentially expressed genes using GSC cell lines"
+author: "Sonali Arora"
+date: "May 19, 2020"
+output: 
+  html_document:
+    toc: true
+    theme: united
+---
+
+In this vignette, we will compute calculate differentially expressed genes from the GSC cell lines. 
+
+We first start with the G14 and G179 cell lines. We are looking for differentially expresssed
+genes in G14 compared to G179 cell line samples.
+
+# Compute Differentially expressed genes (DEGs)
+
+```{r}
+
+library(DESeq2)
+library(ggplot2)
+raw_counts_fname = "GSE89623_448_559_G14_G179.txt"
+raw= read.delim(raw_counts_fname, header=T, stringsAsFactors = FALSE, 
+                row.names=1, check.names = FALSE)
+
+raw_counts = raw[, c("G14-1", "G14-2", "G14-3", 
+              "G179-1", "G179-2", "G179-3")]
+
+coldata = cbind(sampleName = colnames(raw_counts), 
+                sampleGroup = c(rep("G14", 3), rep("G179", 3) ))
+
+rownames(coldata) = colnames(raw_counts)
+dds = DESeqDataSetFromMatrix(raw_counts, colData =coldata, 
+                             design= ~sampleGroup)
+dds$sampleGroup = relevel(dds$sampleGroup, "G179")
+rld <- rlog(dds, blind=FALSE)
+
+data <- plotPCA(rld,intgroup =c("sampleGroup"), ntop=nrow(raw_counts), returnData=TRUE)
+percentVar <- round(100 * attr(data, "percentVar"))
+p1=ggplot(data, aes(PC1, PC2, color=sampleGroup))+ geom_point(size=6) +
+    xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+    ylab(paste0("PC2: ",percentVar[2],"% variance"))+
+    geom_text(aes(label=sampleNames),hjust="inward", vjust=2, size=6)+
+    scale_color_manual(breaks= c(control_group, test_group),
+                       values=c("darkgreen", "purple")) 
+
+
+dds = DESeq(dds)
+
+res1 = results(dds, alpha=0.05, lfcThreshold = 1)
+res1 = as.data.frame(res1)
+res1 = res1[,c("log2FoldChange", "pvalue", "padj")]
+
+G14_vs_G179_up_reg = res1[which(res1$log2FoldChange >= 1 & res1$padj < 0.05), ]
+G14_vs_G179_down_reg = res1[which(res1$log2FoldChange <= -1 & res1$padj < 0.05), ]
+
+```
+
+Next, we calculate the number of differentially regulated genes in 448T compared to 559 cell line. 
+
+
+````{r}
+
+raw_counts = raw[, c( "448T-1", "448T-2", "448T-3",
+             "559T-1" ,"559T-2" ,"559T-3")]
+
+coldata = cbind(sampleName = colnames(raw_counts), 
+                sampleGroup = c(rep("448", 3), rep("559", 3) ))
+
+rownames(coldata) = colnames(raw_counts)
+dds = DESeqDataSetFromMatrix(raw_counts, colData =coldata, 
+                             design= ~sampleGroup)
+dds$sampleGroup = relevel(dds$sampleGroup, "559")
+rld <- rlog(dds, blind=FALSE)
+
+data <- plotPCA(rld,intgroup =c("sampleGroup"), ntop=nrow(raw_counts), returnData=TRUE)
+percentVar <- round(100 * attr(data, "percentVar"))
+p2=ggplot(data, aes(PC1, PC2, color=sampleGroup))+ geom_point(size=6) +
+    xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+    ylab(paste0("PC2: ",percentVar[2],"% variance"))+
+    geom_text(aes(label=sampleNames),hjust="inward", vjust=2, size=6)+
+    scale_color_manual(breaks= c(control_group, test_group),
+                       values=c("darkgreen", "purple")) 
+
+dds = DESeq(dds)
+
+res2 = results(dds, alpha=0.05, lfcThreshold = 1)
+res2 = as.data.frame(res2)
+res2 = res2[,c("log2FoldChange", "pvalue", "padj")]
+
+s448_vs_559_up_reg = res2[which(res2$log2FoldChange >= 1 & res2$padj < 0.05), ]
+s448_vs_559_down_reg = res2[which(res2$log2FoldChange <= -1 & res2$padj < 0.05), ]
+
+```
+
+
+# GO analysis 
+
+Now we will perform Gene Ontology (GO) and Pathway enrichment analysis (from Reactome)
+on the differentially expressed genes. 
+
+```{r}
+source("Utils.R")
+
+myEnrichmentFunction(rownames(s448_vs_559_up_reg), title="up_reg_in_448", resdir=getwd())
+myEnrichmentFunction(rownames(s448_vs_559_down_reg), title="up_reg_in_448", resdir=getwd())
+
+myEnrichmentFunction(rownames(G14_vs_G179_up_reg), title="up_reg_in_G14", resdir=getwd())
+myEnrichmentFunction(rownames(G14_vs_G179_down_reg), title="up_reg_in_G14", resdir=getwd())
+
+````
+
+

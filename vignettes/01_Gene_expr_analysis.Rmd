@@ -1,0 +1,339 @@
+---
+title: "Gene expression analysis of TCGA and GTEx data"
+author: "Sonali Arora"
+date: "May 19, 2020"
+output: 
+  html_document:
+    toc: true
+    theme: united
+---
+
+In this vignette, we will compute PCA for the publicly available Bulk gene expression data from TCGA and GTEx portal. 
+
+# Obtaining Gene data from GTEx 
+
+RNA-seq data for TCGA-GBM and TCGA-LGG were downloaded from the UCSC Xena/Toil hub [https://xenabrowser.net/datapages/?hub=https://tcga.xenahubs.net:443]. 
+RNA-seq data for human normal brain samples were downloaded from the GTEx data portal (v6) [https://www.gtexportal.org/].
+Sample infomation for GTEx samples was obtained from the file : "GTEx_Data_V6_Annotations_SampleAttributesDS.txt"
+
+We next split the GTEx data for all the brain regions into individual brain regions. 
+
+```{r}
+gtex_rpkm= read.delim("GTEx_Analysis_v6_RNA-seq_RNA-SeQCv1.1.8_gene_rpkm.gct", 
+                      header=T,  skip=2, row.names=1, nrow=500)
+gtex_rpkm = gtex_rpkm[,-1]
+gtex_rpkm = log2(gtex_rpkm+1)
+
+info = read.delim("GTEx_Data_V6_Annotations_SampleAttributesDS.txt", 
+                  header=T , stringsAsFactors=FALSE, row.names=1)
+info = info[which(info$SMTS=="Brain"), ]
+sp = split(info, info$SMTSD)
+
+lapply(1:length(sp), function(x){
+  x = sp[[1]]
+  region = gsub("Brain - ", "", names(sp)[[1]]) 
+  sample_nms = unique(rownames(x))
+  idx = na.omit(match(sample_nms, gsub("[.]", "-", colnames(gtex_rpkm))))
+  temp_df = gtex_rpkm[, idx]
+  temp_df = cbind(gene = rownames(temp_df), temp_df)
+  region 
+  write.table(temp_df, paste0("log2_rpkm_whole_gene_counts_",region,".txt"), 
+                sep="\t", quote=FALSE, row.names=FALSE, col.names=TRUE)
+})
+```
+
+
+
+
+# Computing PCA 
+
+```{r download }
+
+library(pheatmap)
+library(RColorBrewer)
+library(ggplot2)
+
+amygdala = read.delim(file.path(dir1, "log2_rpkm_whole_gene_counts_amygdala.txt"), 
+                      header=T, stringsAsFactors=FALSE, row.names=1)
+brodman9 = read.delim(file.path(dir1, "log2_rpkm_whole_gene_counts_Brodmann_1909_area_9.txt"), 
+                      header=T, stringsAsFactors=FALSE, row.names=1)
+brodman24 = read.delim(file.path(dir1, "log2_rpkm_whole_gene_counts_Brodmann_1909_area_24.txt"), 
+                       header=T, stringsAsFactors=FALSE, row.names=1)
+caudate_nucleus =read.delim(file.path(dir1,"log2_rpkm_whole_gene_counts_caudate_nucleus.txt"), 
+                            header=T, stringsAsFactors=FALSE, row.names=1)
+cerebellum = read.delim(file.path(dir1,"log2_rpkm_whole_gene_counts_cerebellum.txt"), 
+                        header=T, stringsAsFactors=FALSE, row.names=1)
+cer_hemis = read.delim(file.path(dir1,"log2_rpkm_whole_gene_counts_cerebellar_hemisphere.txt"),
+                       header=T, stringsAsFactors=FALSE, row.names=1)
+hippo = read.delim(file.path(dir1,"log2_rpkm_whole_gene_counts_hippocampus_proper.txt"), 
+                   header=T, stringsAsFactors=FALSE, row.names=1)
+frontal = read.delim(file.path(dir1,"log2_rpkm_whole_gene_counts_cerebral_cortex.txt"), 
+                     header=T, stringsAsFactors=FALSE, row.names=1)
+hypothalamus= read.delim(file.path(dir1,"log2_rpkm_whole_gene_counts_hypothalamus.txt"), 
+                         header=T, stringsAsFactors=FALSE, row.names=1)
+nucleus_accumbens= read.delim(file.path(dir1,"log2_rpkm_whole_gene_counts_nucleus_accumbens.txt"), 
+                              header=T, stringsAsFactors=FALSE, row.names=1)
+putamen =read.delim(file.path(dir1,"log2_rpkm_whole_gene_counts_putamen.txt"), 
+                    header=T, stringsAsFactors=FALSE, row.names=1)
+spinal =read.delim(file.path(dir1,"log2_rpkm_whole_gene_counts_spinal_cord.txt"), 
+                   header=T, stringsAsFactors=FALSE, row.names=1)
+substantia_nigra = read.delim(file.path(dir1,"log2_rpkm_whole_gene_counts_substantia_nigra.txt"), 
+                              header=T, stringsAsFactors=FALSE, row.names=1)
+gbm = read.delim( "log2_rpkm_whole_gene_counts_gbm.txt",
+                 header=T, stringsAsFactors=FALSE, row.names=1)
+lgg = read.delim( "log2_rpkm_whole_gene_counts_lgg.txt",
+                 header=T, stringsAsFactors=FALSE, row.names=1)
+colnames(gbm)= substr(colnames(gbm), 1, 12)
+colnames(lgg) = substr(colnames(lgg), 1, 12)
+
+genes = intersect( rownames(lgg), rownames(cerebellum))
+amygdala = amygdala[genes, ]
+brodman9= brodman9[genes, ]
+brodman24= brodman24[genes, ]
+caudate_nucleus = caudate_nucleus[genes, ]
+cerebellum = cerebellum[genes, ]
+cer_hemis = cer_hemis[genes, ]
+hippo = hippo[genes, ]
+frontal = frontal[genes, ]
+hypothalamus=hypothalamus[genes, ]
+nucleus_accumbens=nucleus_accumbens[genes, ]
+putamen = putamen[genes, ]
+spinal =spinal[genes, ]
+substantia_nigra =substantia_nigra[genes, ]
+gbm = gbm[genes, ]
+lgg = lgg[genes, ]
+
+cimp_mat = read.delim( "CIMP_nonCIMp_status_Bolouri_et_al.txt", 
+                         header=T, stringsAsFactors = FALSE)
+
+color_mat = c("#008080", "Black", "Blue", "Brown", "Coral", "Cyan", 
+              "Green", "Red", "Yellow", "Magenta", "#aaffc3", "Maroon", 
+              "Navy", "Purple", "Orange")
+names(color_mat) = c("Amygdala", "Brodman24", "Brodman9", "Caudate Nucleus", 
+        "Cerebellar Hemisphere", "Cerebellum", "cerebral cortex", 
+        "Hippocampus", "hypothalamus", "Nucleus Accumbens", 
+       "Putamen", "Spinal Cord", "Substantia Nigra", "GBM","LGG")
+
+theme_sa <- theme_bw(base_family="Helvetica") +
+        theme(
+        plot.title = element_text(hjust=0, vjust=0, 
+            lineheight=.8, face="bold", size=25 ),
+        plot.margin=unit(c(0.5,1,0.5,1),"cm"), 
+        axis.text=element_text(size=25),
+        axis.title=element_text(size=25),
+        legend.text=element_text(size=25),
+        legend.key.height = unit(0.3, "cm"),
+        legend.justification = 'left',
+        legend.title=element_blank() )
+```
+
+## PCA for All Brain GTEx Samples
+
+```{r}
+cpm_counts = cbind( cerebellum, cer_hemis, 
+                   amygdala, brodman9,brodman24, caudate_nucleus,  
+                   hippo, frontal, hypothalamus, 
+                   nucleus_accumbens, putamen, 
+                   spinal, substantia_nigra)
+sampleNames = colnames(cpm_counts)
+
+pc= prcomp(t(cpm_counts))
+pc_data1 = data.frame(PC1=pc$x[,1], PC2=pc$x[,2])
+percentVar <- (pc$sdev^2 / sum( pc$sdev^2 ) )*100
+percentVar= round(percentVar[1:2], 2) # 44.74, 13.66
+
+sampleGroup = c(rep("Cerebellum", ncol(cerebellum)), 
+                rep("Cerebellar Hemisphere", ncol(cer_hemis)), 
+                rep("Amygdala", ncol(amygdala)), 
+                rep("Brodman9", ncol(brodman9)), 
+                rep("Brodman24", ncol(brodman24)), 
+                rep("Caudate Nucleus", ncol(caudate_nucleus)),
+                rep("Hippocampus", ncol(hippo)),
+                rep("cerebral cortex", ncol(frontal)), 
+                rep("hypothalamus", ncol(hypothalamus)), 
+                rep("Nucleus Accumbens", ncol(nucleus_accumbens)),
+                rep("Putamen", ncol(putamen)), 
+                rep("Spinal Cord", ncol(spinal)), 
+                rep("Substantia Nigra", ncol(substantia_nigra)) )
+
+sampleType = rep("GTEX", ncol(cpm_counts))
+
+pc_data1 = cbind(pc_data1, sampleGroup, sampleType, sampleName=colnames(cpm_counts))
+write.table(pc_data1,  "pc_data_gtex_spinal_cord_included.txt", 
+            sep="\t", quote=FALSE, row.names=FALSE, col.names=TRUE)
+
+pc_data1$sampleGroup <- factor(pc_data1$sampleGroup, levels = unique(pc_data1$sampleGroup))
+cls = color_mat[match(pc_data1$sampleGroup, names(color_mat))]
+
+
+p1 = ggplot(pc_data1, aes(PC1, PC2, color=sampleGroup )) +
+    geom_point(size=3, alpha=0.6) +
+    xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+    ylab(paste0("PC2: ",percentVar[2],"% variance")) +
+    ggtitle("a") +
+    theme_bw() + theme_sa + 
+    scale_colour_manual(name = "Data Source",
+                        labels = levels(pc_data1$sampleGroup),
+                        values = cls) 
+
+```
+
+## PCA for  Pooled Brain Samples from GTEx (GTEx Brain Samples without cerebellum and spinal cord)
+
+```{r}
+cpm_counts = cbind(amygdala, brodman9,brodman24, caudate_nucleus,  
+                   hippo, frontal, hypothalamus, 
+                   nucleus_accumbens, putamen, 
+                   substantia_nigra)
+sampleNames = colnames(cpm_counts)
+
+pc= prcomp(t(cpm_counts))
+pc_data1 = data.frame(PC1=pc$x[,1], PC2=pc$x[,2])
+percentVar <- (pc$sdev^2 / sum( pc$sdev^2 ) )*100
+percentVar= round(percentVar[1:2], 2) # 32.24 12.22
+
+sampleGroup = c(rep("Amygdala", ncol(amygdala)), 
+                rep("Brodman9", ncol(brodman9)), 
+                rep("Brodman24", ncol(brodman24)), 
+                rep("Caudate Nucleus", ncol(caudate_nucleus)),
+                rep("Hippocampus", ncol(hippo)),
+                rep("cerebral cortex", ncol(frontal)), 
+                rep("hypothalamus", ncol(hypothalamus)), 
+                rep("Nucleus Accumbens", ncol(nucleus_accumbens)),
+                rep("Putamen", ncol(putamen)), 
+                rep("Substantia Nigra", ncol(substantia_nigra)) )
+sampleType = rep("GTEX", ncol(cpm_counts))
+
+pc_data1 = cbind(pc_data1, sampleGroup, sampleType, sampleName=colnames(cpm_counts))
+write.table(pc_data1, "pc_data_gtex_No_spinal_cord_No_cerebellum.txt", 
+            sep="\t", quote=FALSE, row.names=FALSE, col.names=TRUE)
+
+pc_data1$sampleGroup <- factor(pc_data1$sampleGroup, levels = unique(pc_data1$sampleGroup))
+cls = color_mat[match(pc_data1$sampleGroup, names(color_mat))]
+
+p2 = ggplot(pc_data1, aes(PC1, PC2, color=sampleGroup )) +
+    geom_point(size=3, alpha=0.6) +
+    xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+    ylab(paste0("PC2: ",percentVar[2],"% variance")) +
+    ggtitle("b") +
+    theme_bw() + theme_sa + 
+    scale_colour_manual(name = "Data Source",
+                        labels = levels(pc_data1$sampleGroup),
+                        values = cls)
+
+```
+
+
+## PCA for TCGA and Pooled Brain Samples from GTEx
+
+```{r}
+cpm_counts = cbind(gbm,  lgg, 
+                   amygdala, brodman9,brodman24, caudate_nucleus,  
+                   hippo, frontal, hypothalamus, 
+                   nucleus_accumbens, putamen, 
+                   substantia_nigra)
+sampleNames = colnames(cpm_counts)
+
+pc= prcomp(t(cpm_counts))
+pc_data1 = data.frame(PC1=pc$x[,1], PC2=pc$x[,2])
+percentVar <- (pc$sdev^2 / sum( pc$sdev^2 ) )*100
+percentVar= round(percentVar[1:2], 2) #  50.25  8.74
+
+sampleGroup = c(rep("GBM", ncol(gbm)), 
+                rep("LGG", ncol(lgg)), 
+                rep("Amygdala", ncol(amygdala)), 
+                rep("Brodman9", ncol(brodman9)), 
+                rep("Brodman24", ncol(brodman24)), 
+                rep("Caudate Nucleus", ncol(caudate_nucleus)),
+                rep("Hippocampus", ncol(hippo)),
+                rep("cerebral cortex", ncol(frontal)), 
+                rep("hypothalamus", ncol(hypothalamus)), 
+                rep("Nucleus Accumbens", ncol(nucleus_accumbens)),
+                rep("Putamen", ncol(putamen)), 
+                rep("Substantia Nigra", ncol(substantia_nigra)) )
+gtex_no = ncol(cpm_counts) - (ncol(lgg)+ncol(gbm))
+sampleType = c(rep("TCGA", ncol(gbm)+ ncol(lgg)), 
+               rep("GTEX", gtex_no))
+
+pc_data1 = cbind(pc_data1, sampleGroup, sampleType, sampleName=colnames(cpm_counts))
+write.table(pc_data1, "pc_data_tcga_gtex_No_spinal_cord_No_cerebellum.txt", 
+            sep="\t", quote=FALSE, row.names=FALSE, col.names=TRUE)
+
+pc_data1$sampleGroup <- factor(pc_data1$sampleGroup, levels = unique(pc_data1$sampleGroup))
+cls = color_mat[match(pc_data1$sampleGroup, names(color_mat))]
+
+p3 = ggplot(pc_data1, aes(PC1, PC2, color=sampleGroup )) +
+    geom_point(size=3, alpha=0.6) +
+    xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+    ylab(paste0("PC2: ",percentVar[2],"% variance")) +
+    ggtitle("c") +
+    theme_bw() + theme_sa + 
+    scale_colour_manual(name = "Data Source",
+                        labels = levels(pc_data1$sampleGroup),
+                        values = cls)
+
+
+```
+
+## PCA for only TCGA Samples
+
+```{r}
+
+cpm_counts = cbind(gbm,  lgg )
+pc= prcomp(t(cpm_counts))
+pc_data1 = data.frame(PC1=pc$x[,1], PC2=pc$x[,2])
+percentVar <- (pc$sdev^2 / sum( pc$sdev^2 ) )*100
+percentVar= round(percentVar[1:2], 2) # 44.74, 13.66
+
+sampleGroup = c(rep("GBM", ncol(gbm)), 
+                rep("LGG", ncol(lgg)) )
+sampleType = rep("TCGA", ncol(cpm_counts)) 
+cimp_status = cimp_mat[ match(colnames(cpm_counts), cimp_mat[,2]) , "status"]
+
+pc_data1 = cbind(pc_data1, sampleGroup, sampleType, CIMPStatus=cimp_status, 
+                 sampleName=colnames(cpm_counts), stringsAsFactors=FALSE)
+write.table(pc_data1, "pc_data_ONLY_tcga.txt", 
+            sep="\t", quote=FALSE, row.names=FALSE, col.names=TRUE)
+
+
+cls = color_mat[match(pc_data1$sampleGroup, names(color_mat))]
+pc_data1$sampleGroup <- factor(pc_data1$sampleGroup, levels = unique(pc_data1$sampleGroup))
+pc_data1$CIMPStatus[which(is.na(pc_data1$CIMPStatus ))]= "Not Available"
+pc_data1$CIMPStatus= factor(pc_data1$CIMPStatus, 
+                            levels = c("cimpLGG", "cimpGBM", "nonCimpLGG", "nonCimpGBM", "Not Available"))
+
+p4 = ggplot(pc_data1, aes(PC1, PC2, color=CIMPStatus, shape=CIMPStatus )) +
+    geom_point(size=3, alpha=0.6) +
+    xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+    ylab(paste0("PC2: ",percentVar[2],"% variance")) +
+    ggtitle("d") +
+    theme_bw() + theme_sa + 
+    scale_colour_manual(name = "Data Source",
+                        labels = c("cimpLGG", "cimpGBM", "nonCimpLGG", "nonCimpGBM", "Not Available"),
+                        values = c("springgreen3", "black", "deeppink" , "blue", "grey60")) +
+    scale_shape_manual(name = "Data Source",
+                       labels = c("cimpLGG", "cimpGBM", "nonCimpLGG", "nonCimpGBM", "Not Available"),
+                       values = rep(17, 5))
+```
+
+## Make Fig 1 
+
+```{r}
+library(grid)
+library(gridExtra)
+
+gs = list( p1, p2, p3, p4)
+lay <- rbind(c(1,3), 
+             c(2,4))
+
+pdf( "Fig1.pdf", width = 24, height =16)
+grid.arrange(grobs = gs, layout_matrix = lay, 
+             heights=unit(c(6,6), c("in", "in")) )
+dev.off()
+
+```
+
+
+
+
+

@@ -1,0 +1,188 @@
+---
+title: "RNASeq analysis - human neural stem cells (NSCs)"
+author: "Sonali Arora"
+date: "May 19, 2020"
+output: 
+  html_document:
+    toc: true
+    theme: united
+---
+
+In this vignette, we will compute calculate differentially expressed genes in mouse samples (NSC's )
+
+# DEG 
+
+```{r}
+rm(list=ls())
+
+library(DESeq2)
+library(edgeR)
+library(ggplot2)
+library(pheatmap)
+library(RColorBrewer)
+
+rawdata <- read.delim2("GSE136868_star2_raw_reads.txt", header=T, row.names=1, 
+                       check.names = FALSE, stringsAsFactors = FALSE)
+
+sampleName = colnames(rawdata)
+
+coldata =  do.call(rbind, strsplit(sampleName, "_"))
+coldata[,2] = paste0("rep", coldata[,2])
+coldata = cbind(sampleName, coldata)
+colnames(coldata)[2:3] = c("sampleGroup", "rep_no")
+coldata = data.frame(coldata, stringsAsFactors = FALSE)
+rownames(coldata) = sampleName
+sapply(coldata, class)
+
+coldata$sampleGroup = gsub("FL", "TrkB.FL", coldata$sampleGroup)
+coldata$sampleGroup = gsub("T1", "TrkB.T1", coldata$sampleGroup)
+table(coldata$sampleGroup)
+
+coldata$sampleGroup = factor(coldata$sampleGroup,
+                             levels = c("GFP","TrkB.FL", "TrkB.T1"))
+
+dds <- DESeqDataSetFromMatrix(countData = rawdata,
+                              colData = coldata, design = ~ sampleGroup)
+norm_data <- assay(rlog(dds))
+
+want_cols = c("GFP_1", "GFP_2", "GFP_3",
+  "FL_1" , "FL_2" , "FL_3", "T1_1",  "T1_2" , "T1_3")
+
+rawdata = rawdata[, match(want_cols, colnames(rawdata)) ]
+norm_data = norm_data[, match(want_cols, colnames(norm_data))]
+coldata = coldata[match( colnames(norm_data), rownames(coldata)), ]
+
+colnames(norm_data) = rownames(coldata) = c("GFP_1", "GFP_2", "GFP_3",
+   "TrkB.FL_1","TrkB.FL_2", "TrkB.FL_3", "TrkB.T1_1","TrkB.T1_2", "TrkB.T1_3")
+
+sampleName = colnames(rawdata)
+sampleGroup = coldata$sampleGroup
+y <- DGEList(counts = rawdata, group = sampleGroup)
+
+# Filter out low read counts
+keep <- rowSums(cpm(y$counts)) >= 5
+y <- y[keep, , keep.lib.sizes=FALSE]
+y <- calcNormFactors(y)
+
+# Make a design matrix
+design <- model.matrix(~0+sampleGroup)
+rownames(design) <- colnames(y)
+design
+
+# Estimate dispersion for the dataset
+y <- estimateDisp(y, design, robust=TRUE)
+y$common.dispersion
+
+# Visualize dispersion estimates in a BCV plot
+plotBCV(y)
+
+# Set the comparison baseline to WT
+my.contrasts1 <- makeContrasts(KOvsWT = sampleGroupTrkB.FL-sampleGroupGFP, levels = design)
+my.contrasts2 <- makeContrasts(KOvsWT = sampleGroupTrkB.T1-sampleGroupGFP, levels = design)
+my.contrasts3 <- makeContrasts(KOvsWT = sampleGroupTrkB.T1-sampleGroupTrkB.FL, levels = design)
+
+# Determine differentially expressed genes. Fit genewise glms:
+fit <- glmFit(y, design)
+
+# Conduct likelihood ratio tests for WT vs KO
+lrt1 <- glmLRT(fit, contrast = my.contrasts1)
+lrt2 <- glmLRT(fit, contrast = my.contrasts2)
+lrt3 <- glmLRT(fit, contrast = my.contrasts3)
+
+tt1 = topTags(lrt1,n=nrow(y))
+tt2 = topTags(lrt2,n=nrow(y))
+tt3 = topTags(lrt3,n=nrow(y))
+
+lfc = log2(1.25)
+
+myFun = function(resdf, tag){
+    
+    resdf = resdf$table
+    resdf <- data.frame(gene = rownames(resdf), resdf[, 1], resdf[, 4:5])
+    colnames(resdf) <- c("genes", "edgeR_logFC", "edgeR_PValue", "edgeR_FDR")
+    
+    up_genes = resdf[ which(resdf$edgeR_logFC > lfc &  resdf$edgeR_FDR < 0.05), ]
+    down_genes = resdf[which(resdf$edgeR_logFC < -lfc &  resdf$edgeR_FDR < 0.05), ]
+    rbind(up_genes, down_genes)
+}
+FL_vs_GFP = myFun(tt1, "FL_vs_GFP")
+T1_vs_GFP = myFun(tt2, "T1_vs_GFP")
+T1_vs_FL = myFun(tt3, "T1_vs_FL")
+
+sig_genes = unique(c(rownames(FL_vs_GFP), rownames(T1_vs_GFP), rownames(T1_vs_FL)))
+test_data = norm_data[sig_genes, ]
+
+sampleDists <- dist( t( test_data ) )
+sampleDistMatrix <- as.matrix( sampleDists )
+hc = hclust(sampleDists)
+
+pc= prcomp(t(test_data))
+pc_data1 = data.frame(PC1=pc$x[,1], PC2=pc$x[,2],
+                      sampleGroup=as.character(coldata[,"sampleGroup"]))
+percentVar <- (pc$sdev^2 / sum( pc$sdev^2 ) )*100
+percentVar= round(percentVar[1:2], 2)
+
+
+p2 = ggplot(pc_data1, aes(PC1, PC2, color=sampleGroup)) +
+  geom_point(size=6) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance"))+
+  ggtitle(paste0("PCA plot : ")) + theme_bw() +
+  theme(plot.title = element_text(lineheight=.8, face="bold")) +
+  scale_color_manual( labels = levels(pc_data1$sampleGroup),
+                      values = c("chartreuse", "Coral", "cyan4"))
+
+heat_data = norm_data[ rownames(T1_vs_FL), ]
+dim(heat_data)
+
+ann_colors = list(
+  sampleGroup = c(GFP ="chartreuse", "TrkB.FL"="Coral", "TrkB.T1"="cyan4")
+)
+hc <- hclust(dist(t(heat_data)))
+dd <- as.dendrogram(hc)
+mat_cluster_cols = as.hclust( reorder(dd, c(1,1, 1,10,10,10,10,10), agglo.FUN=mean))
+
+pdf("NSC_PCA.pdf", width =10)
+print(p2)
+dev.off()
+
+pdf("NSC_dendrogram.pdf", width =6, height =4)
+plot(hc, main = paste0("Dendrogram"))
+dev.off()
+
+pdf("NSC_heatmap.pdf", width = 7, height=10)
+color = brewer.pal(7,"Purples")
+pheatmap(heat_data, scale="row", color = color, cluster_cols = mat_cluster_cols,
+         show_rownames = TRUE, annotation_colors = ann_colors,
+         annotation_col = coldata[, "sampleGroup", drop=FALSE], 
+         annotation_legend = TRUE, 
+         annotation_names_col=FALSE)
+dev.off()
+
+```
+
+# GO analysis 
+
+Now we will perform Gene Ontology (GO) and Pathway enrichment analysis (from Reactome)
+on the differentially expressed genes. 
+
+```{r}
+source("Utils.R")
+
+lst = list(FL_vs_GFP, T1_vs_GFP, T1_vs_FL)
+names(lst) = c("FL_vs_GFP", "T1_vs_GFP", "T1_vs_FL")
+
+lapply(1:length(lst), function(x){
+  resdf = lst[[x]]
+  tag = names(lst)[[x]]
+  up_genes = resdf[ which(resdf$edgeR_logFC > lfc &  resdf$edgeR_FDR < 0.05), ]
+  down_genes = resdf[which(resdf$edgeR_logFC < -lfc &  resdf$edgeR_FDR < 0.05), ]
+  
+  myEnrichmentFunction(rownames(up_genes), 
+    title=paste0("up_reg_in", tag), resdir=getwd())
+  myEnrichmentFunction(rownames(down_genes), 
+    title=paste0("down_reg_in", tag), resdir=getwd())
+})
+````
+
+
